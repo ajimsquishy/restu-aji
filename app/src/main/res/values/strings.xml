@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">MEASURE LAB</string>
+    <string name="app_subtitle">Virtual Machining Measurement Laboratory</string>
+    <string name="smk_badge">SMK X • Teknik Pemesinan</string>
+    <string name="nav_home">Beranda</string>
+    <string name="nav_simulators">Simulator</string>
+    <string name="nav_workpieces">Benda Kerja</string>
+    <string name="nav_learning">Materi</string>
+    <string name="nav_evaluation">Evaluasi</string>
+    <string name="action_back">Kembali</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_lock">Kunci</string>
+    <string name="action_unlock">Buka Kunci</string>
+    <string name="action_save">Simpan Hasil</string>
+    <string name="action_zero">ZERO</string>
+    <string name="action_hold">HOLD</string>
+    <string name="action_power">ON/OFF</string>
+    <string name="action_unit">mm/inch</string>
+    <string name="action_change_workpiece">Ganti Benda Kerja</string>
+    <string name="status_in_tolerance">Dalam Toleransi</string>
+    <string name="status_borderline">Perlu Pemeriksaan</string>
+    <string name="status_out_of_tolerance">Di Luar Toleransi</string>
+</resources>

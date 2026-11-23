@@ -1,0 +1,274 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Core Helpers (Zero-Trust & Denial-of-Wallet Evaluation Order)
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCodeHash(hash) {
+      return hash is string && hash.size() == 64 && hash.matches('^[a-f0-9]{64}$');
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() &&
+             request.auth.token.email is string &&
+             request.auth.token.email_verified == true;
+    }
+
+    // Bootstrapped Primary Admin (strictly requires verified Google email)
+    function isBootstrapAdmin() {
+      return isVerifiedEmail() &&
+             request.auth.token.email == 'ajimsquishy@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() ||
+             (isSignedIn() &&
+              exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+              get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints (Anti-Update-Gap)
+    // -------------------------------------------------------------------------
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+             data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.role == 'admin' &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTeacher(data) {
+      return data.keys().hasAll([
+               'uid',
+               'fullName',
+               'email',
+               'teachingClass',
+               'role',
+               'status',
+               'activationCodeHash',
+               'activatedAt',
+               'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'uid',
+               'fullName',
+               'email',
+               'teachingClass',
+               'role',
+               'status',
+               'activationCodeHash',
+               'activatedAt',
+               'updatedAt'
+             ]) &&
+             data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.teachingClass is string && data.teachingClass.size() >= 2 && data.teachingClass.size() <= 50 &&
+             data.role == 'teacher' &&
+             data.status in ['active', 'disabled'] &&
+             isValidCodeHash(data.activationCodeHash) &&
+             data.activatedAt is timestamp && data.activatedAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidActivationCode(data) {
+      return data.keys().hasAll([
+               'codeHash',
+               'codeHint',
+               'status',
+               'createdByAdminUid',
+               'createdAt',
+               'expiresAt'
+             ]) &&
+             data.keys().hasOnly([
+               'codeHash',
+               'codeHint',
+               'note',
+               'status',
+               'createdByAdminUid',
+               'createdAt',
+               'expiresAt',
+               'usedByUid',
+               'usedAt',
+               'revokedAt'
+             ]) &&
+             isValidCodeHash(data.codeHash) &&
+             data.codeHint is string && data.codeHint.size() >= 4 && data.codeHint.size() <= 32 &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 100)) &&
+             data.status in ['active', 'used', 'revoked'] &&
+             data.createdByAdminUid is string && data.createdByAdminUid.size() >= 1 && data.createdByAdminUid.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.expiresAt is timestamp &&
+             (!('usedByUid' in data) || (data.usedByUid is string && data.usedByUid.size() >= 1 && data.usedByUid.size() <= 128)) &&
+             (!('usedAt' in data) || (data.usedAt is timestamp && data.usedAt <= request.time)) &&
+             (!('revokedAt' in data) || (data.revokedAt is timestamp && data.revokedAt <= request.time));
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection 1: /admins/{adminUid}
+    // Only the verified Primary Admin can bootstrap/read/update their own record.
+    // Regular users and teachers can NEVER register as admin or read admin records.
+    // -------------------------------------------------------------------------
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && isAdmin();
+      allow list: if false;
+
+      allow create: if isBootstrapAdmin() &&
+                       isValidId(adminUid) &&
+                       request.auth.uid == adminUid &&
+                       isValidAdmin(incoming()) &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().email == request.auth.token.email;
+
+      allow update: if isSignedIn() &&
+                       isValidId(adminUid) &&
+                       isValidAdmin(incoming()) &&
+                       isAdmin() &&
+                       request.auth.uid == adminUid &&
+                       incoming().uid == existing().uid &&
+                       incoming().email == existing().email &&
+                       incoming().role == existing().role &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection 2: /activation_codes/{codeHash}
+    // Document ID is the 64-char SHA-256 hex digest of the code (plaintext is never stored).
+    // - Only Admin Utama can list, create, revoke, or delete unused codes.
+    // - Signed-in teacher can get a specific code ONLY by knowing its exact SHA-256 hash.
+    // - Atomic single-use redemption enforces active status, non-expiry, and simultaneous
+    //   teacher profile creation via existsAfter()/getAfter().
+    // -------------------------------------------------------------------------
+    match /activation_codes/{codeHash} {
+      allow get: if isSignedIn() && isValidCodeHash(codeHash);
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidCodeHash(codeHash) &&
+                       isValidActivationCode(incoming()) &&
+                       isAdmin() &&
+                       incoming().codeHash == codeHash &&
+                       incoming().status == 'active' &&
+                       incoming().createdByAdminUid == request.auth.uid &&
+                       incoming().expiresAt > request.time &&
+                       incoming().expiresAt <= request.time + duration.value(8, 'd') &&
+                       !('usedByUid' in incoming()) &&
+                       !('usedAt' in incoming()) &&
+                       !('revokedAt' in incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidCodeHash(codeHash) &&
+                       isValidActivationCode(incoming()) &&
+                       incoming().codeHash == existing().codeHash &&
+                       incoming().codeHint == existing().codeHint &&
+                       incoming().createdByAdminUid == existing().createdByAdminUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().expiresAt == existing().expiresAt &&
+                       existing().status == 'active' && (
+                         // Action 1: Admin revokes an unused active code
+                         (isAdmin() &&
+                          incoming().status == 'revoked' &&
+                          !('usedByUid' in incoming()) &&
+                          !('usedAt' in incoming()) &&
+                          incoming().revokedAt is timestamp &&
+                          incoming().revokedAt <= request.time &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'revokedAt'])) ||
+                         // Action 2: Teacher atomically redeems a valid, non-expired single-use code
+                         (isVerifiedEmail() &&
+                          existing().expiresAt > request.time &&
+                          incoming().status == 'used' &&
+                          incoming().usedByUid == request.auth.uid &&
+                          incoming().usedAt is timestamp &&
+                          incoming().usedAt <= request.time &&
+                          !('revokedAt' in incoming()) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'usedByUid', 'usedAt']) &&
+                          existsAfter(/databases/$(database)/documents/teachers/$(request.auth.uid)) &&
+                          getAfter(/databases/$(database)/documents/teachers/$(request.auth.uid)).data.activationCodeHash == codeHash)
+                       );
+
+      // Admin can delete unused (active or revoked) codes; used codes are preserved for audit
+      allow delete: if isSignedIn() &&
+                       isValidCodeHash(codeHash) &&
+                       isAdmin() &&
+                       existing().status != 'used';
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection 3: /teachers/{teacherUid}
+    // PII isolated: a teacher can ONLY read their own document; Admin can read/list all.
+    // Creation requires atomic redemption of an active, unexpired activation code.
+    // Account status (active/disabled) can ONLY be changed by Admin Utama.
+    // -------------------------------------------------------------------------
+    match /teachers/{teacherUid} {
+      allow get: if isSignedIn() &&
+                    isValidId(teacherUid) &&
+                    (request.auth.uid == teacherUid || isAdmin());
+
+      allow list: if isAdmin();
+
+      allow create: if isVerifiedEmail() &&
+                       isValidId(teacherUid) &&
+                       request.auth.uid == teacherUid &&
+                       isValidTeacher(incoming()) &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().email == request.auth.token.email &&
+                       incoming().role == 'teacher' &&
+                       incoming().status == 'active' &&
+                       exists(/databases/$(database)/documents/activation_codes/$(incoming().activationCodeHash)) &&
+                       get(/databases/$(database)/documents/activation_codes/$(incoming().activationCodeHash)).data.status == 'active' &&
+                       get(/databases/$(database)/documents/activation_codes/$(incoming().activationCodeHash)).data.expiresAt > request.time &&
+                       getAfter(/databases/$(database)/documents/activation_codes/$(incoming().activationCodeHash)).data.status == 'used' &&
+                       getAfter(/databases/$(database)/documents/activation_codes/$(incoming().activationCodeHash)).data.usedByUid == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(teacherUid) &&
+                       isValidTeacher(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().email == existing().email &&
+                       incoming().role == existing().role &&
+                       incoming().activationCodeHash == existing().activationCodeHash &&
+                       incoming().activatedAt == existing().activatedAt && (
+                         // Tier 1: Admin Utama can disable/reactivate or edit teacher profile
+                         (isAdmin() &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'teachingClass', 'fullName', 'updatedAt'])) ||
+                         // Tier 2: Active teacher can ONLY update their own teachingClass (disabled teachers are blocked)
+                         (request.auth.uid == teacherUid &&
+                          existing().status == 'active' &&
+                          incoming().status == 'active' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['teachingClass', 'updatedAt']))
+                       );
+
+      allow delete: if false;
+    }
+  }
+}

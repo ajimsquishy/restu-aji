@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Primary application owner/administrator authorized to generate activation codes and manage teacher accounts.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the primary administrator."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google email of the primary administrator."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the administrator."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"],
+          "description": "Fixed administrator role identifier."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the admin record was created (clients submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the admin record was last updated (clients submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "Teacher": {
+      "title": "Teacher",
+      "description": "Activated teacher account linked to a single-use activation code and managed by the primary administrator.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the teacher."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name of the teacher."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Google email of the teacher."
+        },
+        "teachingClass": {
+          "type": "string",
+          "description": "Class taught by the teacher (e.g., X TP 1)."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["teacher"],
+          "description": "Fixed teacher role identifier."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "disabled"],
+          "description": "Account status controlled by the primary administrator."
+        },
+        "activationCodeHash": {
+          "type": "string",
+          "description": "Lowercase 64-character SHA-256 hex digest of the single-use activation code redeemed by this teacher."
+        },
+        "activatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the teacher activated the account (clients submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest update (clients submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "uid",
+        "fullName",
+        "email",
+        "teachingClass",
+        "role",
+        "status",
+        "activationCodeHash",
+        "activatedAt",
+        "updatedAt"
+      ]
+    },
+    "ActivationCode": {
+      "title": "ActivationCode",
+      "description": "Hashed single-use 7-day activation code issued exclusively by the primary administrator for teacher onboarding.",
+      "type": "object",
+      "properties": {
+        "codeHash": {
+          "type": "string",
+          "description": "Lowercase 64-character SHA-256 hex hash of the normalized activation code (matches document ID)."
+        },
+        "codeHint": {
+          "type": "string",
+          "description": "Non-sensitive masked display preview (e.g., GURU-****-9M4X)."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional administrator note describing the intended recipient."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "used", "revoked"],
+          "description": "Lifecycle status of the activation code."
+        },
+        "createdByAdminUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator who generated the code."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the code was generated (clients submit FieldValue.serverTimestamp())."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Expiration timestamp exactly 7 days after generation."
+        },
+        "usedByUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the teacher who redeemed the code."
+        },
+        "usedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the code was redeemed (clients submit FieldValue.serverTimestamp())."
+        },
+        "revokedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when an unused code was revoked by the administrator (clients submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "codeHash",
+        "codeHint",
+        "status",
+        "createdByAdminUid",
+        "createdAt",
+        "expiresAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Primary administrator profile records; strictly restricted to the verified owner."
+    },
+    "/teachers/{teacherUid}": {
+      "schema": { "$ref": "#/entities/Teacher" },
+      "description": "Activated teacher accounts isolated by UID; readable by self or admin, status managed only by admin."
+    },
+    "/activation_codes/{codeHash}": {
+      "schema": { "$ref": "#/entities/ActivationCode" },
+      "description": "SHA-256 hashed single-use activation codes with 7-day expiry and atomic transaction redemption."
+    }
+  }
+}

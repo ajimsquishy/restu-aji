@@ -1,0 +1,6 @@
+{
+  "name": "MEASURE LAB",
+  "description": "Virtual Machining Measurement Laboratory untuk siswa SMK Kelas X Teknik Pemesinan dengan simulasi Jangka Sorong & Mikrometer Sekrup Manual/Digital berbasis engine mekanis presisi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
