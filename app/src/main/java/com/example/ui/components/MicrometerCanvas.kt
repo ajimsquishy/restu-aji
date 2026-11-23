@@ -1174,7 +1174,8 @@ private fun DrawScope.drawMicrometerInstrument(
 @Composable
 fun MicrometerSleeveLoupe(
     state: ManualMicrometerState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showReadingHighlight: Boolean = true
 ) {
     val animatedEffectiveUm by animateFloatAsState(
         targetValue = state.readingUm.toFloat(),
@@ -1188,7 +1189,7 @@ fun MicrometerSleeveLoupe(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(98.dp)
+            .height(104.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFF0A2233))
             .border(1.5.dp, CyanHighlight, RoundedCornerShape(14.dp))
@@ -1223,7 +1224,7 @@ fun MicrometerSleeveLoupe(
             val activeHalfStep = MicrometerScaleGeometry.visibleSleeveHalfStepCount(state.snappedUm)
             val textPaint = CanvasPaintCache.monoBold(
                 colorArgb = NavyDark.toArgb(),
-                textSizePx = (h * 0.20f).coerceIn(18f, 24f),
+                textSizePx = (h * 0.19f).coerceIn(18f, 26f),
                 align = Paint.Align.CENTER
             )
 
@@ -1234,10 +1235,10 @@ fun MicrometerSleeveLoupe(
                 val mm = hs * 0.5f
                 val x = thimbleEdgeX - (readingMm - mm) * pxPerMm
                 if (x < 6f || x > thimbleEdgeX + 0.8f) continue
-                val isLastExposed = hs == activeHalfStep
+                val isLastExposed = showReadingHighlight && hs == activeHalfStep
                 if (hs % 2 == 0) {
                     val whole = hs / 2
-                    val len = if (whole % 5 == 0) midY * 0.50f else midY * 0.34f
+                    val len = if (whole % 5 == 0) midY * 0.46f else midY * 0.32f
                     drawLine(
                         color = if (isLastExposed) TealSecondary else NavyDark,
                         start = Offset(x, midY),
@@ -1245,13 +1246,13 @@ fun MicrometerSleeveLoupe(
                         strokeWidth = if (isLastExposed) 3.0f else if (whole % 5 == 0) 2.4f else 1.5f
                     )
                     if (whole % 5 == 0) {
-                        drawContext.canvas.nativeCanvas.drawText("$whole", x, midY - len - 5f, textPaint)
+                        drawContext.canvas.nativeCanvas.drawText("$whole", x, midY - len - 6f, textPaint)
                     }
                 } else {
                     drawLine(
                         color = if (isLastExposed) OrangeAccent else TealSecondary,
                         start = Offset(x, midY),
-                        end = Offset(x, midY + midY * 0.38f),
+                        end = Offset(x, midY + midY * 0.36f),
                         strokeWidth = if (isLastExposed) 3.0f else 2.0f
                     )
                 }
@@ -1263,7 +1264,7 @@ fun MicrometerSleeveLoupe(
             val fracDiv = continuousDiv - baseDivInt
             val thimblePaint = CanvasPaintCache.monoBold(
                 colorArgb = NavyDark.toArgb(),
-                textSizePx = (h * 0.21f).coerceIn(19f, 25f),
+                textSizePx = (h * 0.19f).coerceIn(18f, 26f),
                 align = Paint.Align.LEFT
             )
             for (delta in -5..5) {
@@ -1271,8 +1272,8 @@ fun MicrometerSleeveLoupe(
                 val divVal = ((rawDiv % 50) + 50) % 50
                 val rel = delta - fracDiv
                 val y = midY - rel * (h / 9.2f)
-                if (y < 6f || y > h - 6f) continue
-                val isAligned = abs(rel) < 0.32f
+                if (y < 8f || y > h - 8f) continue
+                val isAligned = showReadingHighlight && abs(rel) < 0.32f
                 val isMajor = divVal % 5 == 0
                 val tickW = if (isMajor) 28f else 16f
                 drawLine(

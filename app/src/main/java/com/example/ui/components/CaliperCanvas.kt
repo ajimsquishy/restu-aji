@@ -1319,12 +1319,13 @@ private fun DrawScope.drawCaliperInstrument(
 @Composable
 fun VernierMagnifierLoupe(
     state: ManualCaliperState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showCoincidentHighlight: Boolean = true
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(92.dp)
+            .height(108.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFF0A2233))
             .border(1.5.dp, CyanHighlight, RoundedCornerShape(14.dp))
@@ -1353,9 +1354,11 @@ fun VernierMagnifierLoupe(
             )
             drawLine(NavyDark, Offset(0f, midY), Offset(w, midY), 2f)
 
+            val topTextSize = (10.5f * density).coerceIn(18f, 32f)
+            val bottomTextSize = (9.5f * density).coerceIn(16f, 28f)
             val textPaint = CanvasPaintCache.monoBold(
                 colorArgb = NavyDark.toArgb(),
-                textSizePx = 22f,
+                textSizePx = topTextSize,
                 align = Paint.Align.CENTER
             )
 
@@ -1365,41 +1368,43 @@ fun VernierMagnifierLoupe(
             for (mm in startMm..endMm) {
                 val x = mmToX(mm.toFloat())
                 val len = when {
-                    mm % 10 == 0 -> midY * 0.56f
-                    mm % 5 == 0 -> midY * 0.42f
-                    else -> midY * 0.28f
+                    mm % 10 == 0 -> midY * 0.46f
+                    mm % 5 == 0 -> midY * 0.36f
+                    else -> midY * 0.24f
                 }
                 drawLine(NavyDark, Offset(x, midY), Offset(x, midY - len), if (mm % 5 == 0) 2.2f else 1.3f)
                 if (mm % 5 == 0) {
-                    drawContext.canvas.nativeCanvas.drawText("$mm", x, midY - len - 6f, textPaint)
+                    val topLabelY = (midY - len - 5f * density).coerceAtLeast(topTextSize + 4f * density)
+                    drawContext.canvas.nativeCanvas.drawText("$mm", x, topLabelY, textPaint)
                 }
             }
 
             // Draw Vernier Scale ticks directly from integer VernierScaleGeometry (exact 0 µm error at coincident index)
             val smallPaint = CanvasPaintCache.monoBold(
                 colorArgb = NavyDark.toArgb(),
-                textSizePx = 19f,
+                textSizePx = bottomTextSize,
                 align = Paint.Align.CENTER
             )
+            val bottomLabelBaseline = h - 8.5f * density
 
             for (i in 0..state.resolution.divisions) {
                 val vMm = VernierScaleGeometry.vernierTickPositionUm(state.snappedUm, state.resolution, i) / 1000f
                 val x = mmToX(vMm)
                 if (x < -10f || x > w + 10f) continue
-                val isCoincident = i == state.vernierCoincidentIndex
+                val isCoincident = showCoincidentHighlight && i == state.vernierCoincidentIndex
                 val isZero = i == 0
                 val isMajor = when (state.resolution) {
                     CaliperResolution.RES_0_05_MM -> i % 2 == 0
                     CaliperResolution.RES_0_02_MM -> i % 5 == 0
                 }
-                val len = if (isMajor || isCoincident) (h - midY) * 0.48f else (h - midY) * 0.30f
+                val len = if (isMajor || isCoincident) (h - midY) * 0.42f else (h - midY) * 0.26f
 
                 if (isCoincident) {
                     drawLine(
                         color = OrangeAccent,
-                        start = Offset(x, 4f),
-                        end = Offset(x, h - 4f),
-                        strokeWidth = 3f,
+                        start = Offset(x, 4f * density),
+                        end = Offset(x, h - 4f * density),
+                        strokeWidth = 2.6f,
                         cap = StrokeCap.Round
                     )
                 } else {
@@ -1416,7 +1421,7 @@ fun VernierMagnifierLoupe(
                         CaliperResolution.RES_0_05_MM -> "${i / 2}"
                         CaliperResolution.RES_0_02_MM -> "${i / 5}"
                     }
-                    drawContext.canvas.nativeCanvas.drawText(label, x, h - 8f, smallPaint)
+                    drawContext.canvas.nativeCanvas.drawText(label, x, bottomLabelBaseline, smallPaint)
                 }
             }
         }

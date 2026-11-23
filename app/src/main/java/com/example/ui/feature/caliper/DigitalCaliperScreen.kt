@@ -19,8 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -59,6 +59,7 @@ import com.example.domain.model.MeasurementUnit
 import com.example.ui.components.DigitalCaliperCanvas
 import com.example.ui.components.FaultSimulationBottomSheet
 import com.example.ui.components.MeasureLabTopBar
+import com.example.ui.components.MeasurementModePillRow
 import com.example.ui.components.MeasurementReadoutCard
 import com.example.ui.components.ToleranceStatusCard
 import com.example.ui.components.ToolCompatibilityAlertDialog
@@ -117,8 +118,8 @@ fun DigitalCaliperScreen(
                         modifier = Modifier.minimumInteractiveComponentSize().testTag("digital_caliper_fault_button")
                     ) {
                         Icon(
-                            Icons.Default.BugReport,
-                            contentDescription = "Fault Simulation",
+                            Icons.Default.Tune,
+                            contentDescription = "Simulasi Kesalahan",
                             tint = if (uiState.engine.faultConfig.hasAnyFault) OrangeAccent else Color.White
                         )
                     }
@@ -130,7 +131,6 @@ fun DigitalCaliperScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .navigationBarsPadding()
         ) {
             val isLandscape = maxWidth >= 680.dp
             if (isLandscape) {
@@ -197,6 +197,7 @@ fun DigitalCaliperScreen(
                     )
                     DigitalCaliperControls(uiState, viewModel) { showWorkpiecePicker = true }
                     uiState.toleranceEvaluation?.let { ToleranceStatusCard(it) }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -288,37 +289,48 @@ private fun DigitalCaliperControls(
                 }
             }
 
-            // Measurement Kind Chips
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
+            // Measurement Kind Pills (single-line, balanced widths)
+            MeasurementModePillRow(
+                kinds = listOf(
                     MeasurementKind.OUTSIDE_DIAMETER,
                     MeasurementKind.INSIDE_DIAMETER,
                     MeasurementKind.DEPTH,
                     MeasurementKind.STEP
-                ).forEach { kind ->
-                    FilterChip(
-                        selected = uiState.engine.measurementKind == kind,
-                        onClick = { viewModel.setMeasurementKind(kind) },
-                        label = { Text(kind.shortLabel, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = OrangeAccent,
-                            selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+                ),
+                selectedKind = uiState.engine.measurementKind,
+                onSelect = viewModel::setMeasurementKind
+            )
 
             // Fine Jaw Motion Controls
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { viewModel.stepFine(-100) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("−1 mm") }
-                OutlinedButton(onClick = { viewModel.stepFine(-1) }, modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_minus_step")) {
+                OutlinedButton(
+                    onClick = { viewModel.stepFine(-100) },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Text("−1 mm", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                }
+                OutlinedButton(
+                    onClick = { viewModel.stepFine(-1) },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                    modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_minus_step")
+                ) {
                     Icon(Icons.Default.Remove, contentDescription = "-0.01 mm", modifier = Modifier.size(16.dp))
                 }
-                OutlinedButton(onClick = { viewModel.stepFine(1) }, modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_plus_step")) {
+                OutlinedButton(
+                    onClick = { viewModel.stepFine(1) },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                    modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_plus_step")
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "+0.01 mm", modifier = Modifier.size(16.dp))
                 }
-                OutlinedButton(onClick = { viewModel.stepFine(100) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("+1 mm") }
+                OutlinedButton(
+                    onClick = { viewModel.stepFine(100) },
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Text("+1 mm", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
+                }
             }
 
             // Lock, Reset, X-Ray, Workpiece, Save
@@ -326,36 +338,36 @@ private fun DigitalCaliperControls(
                 Button(
                     onClick = viewModel::toggleLock,
                     colors = ButtonDefaults.buttonColors(containerColor = if (uiState.engine.isLocked) OrangeAccent else NavyPrimary),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
                     modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_lock_button")
                 ) {
-                    Icon(if (uiState.engine.isLocked) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = "Lock", modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Lock")
+                    Icon(if (uiState.engine.isLocked) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = "Lock", modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Lock", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
                 OutlinedButton(
                     onClick = viewModel::reset,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
                     modifier = Modifier.weight(1f).height(48.dp).testTag("digital_caliper_reset_button")
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset", modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Reset")
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset", modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Reset", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
                 OutlinedButton(
                     onClick = viewModel::toggleXRayMode,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp),
                     modifier = Modifier.weight(0.9f).height(48.dp)
-                ) { Text("X-Ray") }
+                ) { Text("X-Ray", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false) }
                 Button(
                     onClick = onOpenWorkpiecePicker,
                     colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp),
                     modifier = Modifier.weight(1.1f).height(48.dp)
                 ) {
-                    Icon(Icons.Default.Category, contentDescription = "Benda", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Category, contentDescription = "Benda", modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(3.dp))
-                    Text("Benda")
+                    Text("Benda", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
                 }
             }
 

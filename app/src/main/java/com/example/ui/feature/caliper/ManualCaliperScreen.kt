@@ -20,8 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -69,6 +69,7 @@ import com.example.ui.components.FaultSimulationBottomSheet
 import com.example.ui.components.LearningModeSwitcher
 import com.example.ui.components.ManualCaliperCanvas
 import com.example.ui.components.MeasureLabTopBar
+import com.example.ui.components.MeasurementModePillRow
 import com.example.ui.components.MeasurementReadoutCard
 import com.example.ui.components.StepGuideCard
 import com.example.ui.components.ToleranceStatusCard
@@ -129,8 +130,8 @@ fun ManualCaliperScreen(
                         modifier = Modifier.minimumInteractiveComponentSize().testTag("caliper_fault_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.BugReport,
-                            contentDescription = "Fault Simulation",
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Simulasi Kesalahan",
                             tint = if (uiState.engine.faultConfig.hasAnyFault) OrangeAccent else Color.White
                         )
                     }
@@ -148,7 +149,6 @@ fun ManualCaliperScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .navigationBarsPadding()
         ) {
             val isLandscapeWide = maxWidth >= 680.dp
 
@@ -176,7 +176,10 @@ fun ManualCaliperScreen(
                             isXRayMode = uiState.isXRayMode,
                             modifier = Modifier.fillMaxWidth().height(268.dp)
                         )
-                        VernierMagnifierLoupe(state = uiState.engine)
+                        VernierMagnifierLoupe(
+                            state = uiState.engine,
+                            showCoincidentHighlight = !uiState.isBlindMode
+                        )
                         CaliperControlCluster(
                             uiState = uiState,
                             viewModel = viewModel,
@@ -250,7 +253,10 @@ fun ManualCaliperScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = NavyPrimary
                     )
-                    VernierMagnifierLoupe(state = uiState.engine)
+                    VernierMagnifierLoupe(
+                        state = uiState.engine,
+                        showCoincidentHighlight = !uiState.isBlindMode
+                    )
                     MeasurementReadoutCard(
                         readingText = "${MeasurementUnitConverter.formatUmAsMm(uiState.engine.readingUm, uiState.engine.resolution.mmDecimals, commaDecimal = true)} mm",
                         secondaryUnitText = "${MeasurementUnitConverter.formatUmAsInch(uiState.engine.readingUm)} in",
@@ -279,6 +285,7 @@ fun ManualCaliperScreen(
                     if (uiState.learningMode == LearningMode.LEARN) {
                         StepGuideCard("Langkah Pembelajaran", caliperSteps, uiState.activeStepIndex)
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -357,30 +364,18 @@ private fun CaliperControlCluster(
                 }
             }
 
-            // 2. Jenis Pengukuran (Outside, Inside, Depth, Step)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf(
+            // 2. Jenis Pengukuran (Outside, Inside, Depth, Step — single line)
+            MeasurementModePillRow(
+                kinds = listOf(
                     MeasurementKind.OUTSIDE_DIAMETER,
                     MeasurementKind.INSIDE_DIAMETER,
                     MeasurementKind.DEPTH,
                     MeasurementKind.STEP
-                ).forEach { kind ->
-                    val selected = uiState.engine.measurementKind == kind
-                    FilterChip(
-                        selected = selected,
-                        onClick = { viewModel.setMeasurementKind(kind) },
-                        label = { Text(kind.shortLabel, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = OrangeAccent,
-                            selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f).testTag("caliper_kind_${kind.name.lowercase()}")
-                    )
-                }
-            }
+                ),
+                selectedKind = uiState.engine.measurementKind,
+                onSelect = viewModel::setMeasurementKind,
+                testTagPrefix = "caliper_kind"
+            )
 
             // 3. Exact Thumb Wheel Controls (-1 mm, -1 step, +1 step, +1 mm)
             val fineStepLabel = uiState.engine.resolution.label.removeSuffix(" mm")

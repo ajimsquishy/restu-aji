@@ -108,10 +108,11 @@ fun MetrologyTutorScreen(
 
     val isBusy = state.status is TutorStatus.Loading || state.status is TutorStatus.Streaming
 
-    // Auto-scroll to latest message as conversation grows or streams
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.size)
+    // Auto-scroll to latest message or error banner as conversation grows or streams
+    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length, state.status) {
+        val lastItemIndex = state.messages.size + if (state.status is TutorStatus.Error) 1 else 0
+        if (lastItemIndex > 0) {
+            listState.animateScrollToItem(lastItemIndex)
         }
     }
 
@@ -318,9 +319,7 @@ fun MetrologyTutorScreen(
                 color = Color.White,
                 shadowElevation = 8.dp,
                 border = BorderStroke(1.dp, LabOutline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
                     modifier = Modifier

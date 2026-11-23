@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.example.domain.engine.MeasurementUnitConverter
 import com.example.domain.model.FaultConfig
 import com.example.domain.model.LearningMode
+import com.example.domain.model.MeasurementKind
 import com.example.domain.model.MeasurementUnit
 import com.example.domain.model.MeasurementZone
 import com.example.domain.model.ToleranceEvaluation
@@ -332,13 +333,65 @@ fun ToleranceStatusCard(
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     color = bgColor.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = evaluation.qualityAdvice,
                         style = MaterialTheme.typography.bodySmall,
                         color = NavyDark,
-                        modifier = Modifier.padding(10.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MeasurementModePillRow(
+    kinds: List<MeasurementKind>,
+    selectedKind: MeasurementKind,
+    onSelect: (MeasurementKind) -> Unit,
+    testTagPrefix: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        kinds.forEach { kind ->
+            val selected = kind == selectedKind
+            val weight = when (kind) {
+                MeasurementKind.DEPTH -> 1.32f
+                MeasurementKind.STEP -> 0.78f
+                else -> 1f
+            }
+            Surface(
+                color = if (selected) OrangeAccent else Color(0xFFF7FAFC),
+                contentColor = if (selected) Color.White else NavyPrimary,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, if (selected) OrangeAccent else LabOutline),
+                modifier = Modifier
+                    .weight(weight)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onSelect(kind) }
+                    .let { base ->
+                        if (testTagPrefix != null) base.testTag("${testTagPrefix}_${kind.name.lowercase()}") else base
+                    }
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                ) {
+                    Text(
+                        text = kind.shortLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

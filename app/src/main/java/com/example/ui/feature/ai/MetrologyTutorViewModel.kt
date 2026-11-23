@@ -200,32 +200,48 @@ class MetrologyTutorViewModel(
 
     fun retryLastMessage() {
         val prompt = _uiState.value.lastFailedPrompt ?: return
-        sendMessage(prompt)
+        sendMessage(prompt, isRetry = true)
     }
 
-    fun sendMessage(rawPrompt: String) {
+    fun sendMessage(rawPrompt: String, isRetry: Boolean = false) {
         val trimmed = rawPrompt.trim()
         if (trimmed.isEmpty()) return
         val currentStatus = _uiState.value.status
         if (currentStatus is TutorStatus.Loading || currentStatus is TutorStatus.Streaming) return
 
         val topic = _uiState.value.selectedTopic
-        val userMessage = TutorChatMessage(
-            author = ChatAuthor.USER,
-            text = trimmed,
-            topicLabel = topic.takeIf { it != TutorFocusTopic.ALL }?.shortLabel
-        )
         val assistantPlaceholderId = UUID.randomUUID().toString()
 
         _uiState.update { state ->
+            val lastMessage = state.messages.lastOrNull()
+            val shouldReuseLastUserBubble = isRetry &&
+                lastMessage?.author == ChatAuthor.USER &&
+                lastMessage.text == trimmed
+
+            val updatedMessages = buildList {
+                addAll(state.messages)
+                if (!shouldReuseLastUserBubble) {
+                    add(
+                        TutorChatMessage(
+                            author = ChatAuthor.USER,
+                            text = trimmed,
+                            topicLabel = topic.takeIf { it != TutorFocusTopic.ALL }?.shortLabel
+                        )
+                    )
+                }
+                add(
+                    TutorChatMessage(
+                        id = assistantPlaceholderId,
+                        author = ChatAuthor.MODEL,
+                        text = "",
+                        topicLabel = topic.takeIf { it != TutorFocusTopic.ALL }?.shortLabel,
+                        isStreaming = true
+                    )
+                )
+            }
+
             state.copy(
-                messages = state.messages + userMessage + TutorChatMessage(
-                    id = assistantPlaceholderId,
-                    author = ChatAuthor.MODEL,
-                    text = "",
-                    topicLabel = topic.takeIf { it != TutorFocusTopic.ALL }?.shortLabel,
-                    isStreaming = true
-                ),
+                messages = updatedMessages,
                 status = TutorStatus.Loading,
                 lastFailedPrompt = null
             )
@@ -296,8 +312,15 @@ class MetrologyTutorViewModel(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Firebase AI Logic chat failed", e)
-                val detail = e.localizedMessage?.takeIf { it.isNotBlank() }
-                    ?: "Gagal terhubung ke layanan Gemini AI."
+                val rawMessage = e.localizedMessage.orEmpty()
+                val detail = when {
+                    rawMessage.contains("Default FirebaseApp is not initialized", ignoreCase = true) ->
+                        "Konfigurasi Firebase belum terpasang pada APK build lokal ini (file app/google-services.json tidak ditemukan saat build di Android Studio). Salin file app/google-services.json ke folder app/ lalu build ulang APK."
+                    rawMessage.contains("403") || rawMessage.contains("AppCheck", ignoreCase = true) ->
+                        "Permintaan ditolak oleh Firebase App Check (HTTP 403). Pastikan koneksi internet aktif dan build menggunakan konfigurasi Firebase proyek ini."
+                    rawMessage.isNotBlank() -> rawMessage
+                    else -> "Gagal terhubung ke layanan Gemini AI. Periksa koneksi internet Anda lalu coba lagi."
+                }
                 handleInferenceError(
                     placeholderId = assistantPlaceholderId,
                     failedPrompt = trimmed,

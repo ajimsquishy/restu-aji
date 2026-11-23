@@ -19,8 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -66,6 +66,7 @@ import com.example.ui.components.FaultSimulationBottomSheet
 import com.example.ui.components.LearningModeSwitcher
 import com.example.ui.components.ManualMicrometerCanvas
 import com.example.ui.components.MeasureLabTopBar
+import com.example.ui.components.MeasurementModePillRow
 import com.example.ui.components.MeasurementReadoutCard
 import com.example.ui.components.MicrometerSleeveLoupe
 import com.example.ui.components.StepGuideCard
@@ -125,8 +126,8 @@ fun ManualMicrometerScreen(
                         modifier = Modifier.minimumInteractiveComponentSize().testTag("micrometer_fault_button")
                     ) {
                         Icon(
-                            Icons.Default.BugReport,
-                            contentDescription = "Fault Simulation",
+                            Icons.Default.Tune,
+                            contentDescription = "Simulasi Kesalahan",
                             tint = if (uiState.engine.faultConfig.hasAnyFault) OrangeAccent else Color.White
                         )
                     }
@@ -141,7 +142,6 @@ fun ManualMicrometerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .navigationBarsPadding()
         ) {
             val isLandscape = maxWidth >= 680.dp
             if (isLandscape) {
@@ -167,7 +167,10 @@ fun ManualMicrometerScreen(
                         if (!uiState.isBlindMode) {
                             MicrometerTelemetryHeader(uiState = uiState)
                         }
-                        MicrometerSleeveLoupe(state = uiState.engine)
+                        MicrometerSleeveLoupe(
+                            state = uiState.engine,
+                            showReadingHighlight = !uiState.isBlindMode
+                        )
                         ManualMicrometerControls(
                             uiState = uiState,
                             viewModel = viewModel,
@@ -226,7 +229,10 @@ fun ManualMicrometerScreen(
                             color = NavyPrimary
                         )
                     }
-                    MicrometerSleeveLoupe(state = uiState.engine)
+                    MicrometerSleeveLoupe(
+                        state = uiState.engine,
+                        showReadingHighlight = !uiState.isBlindMode
+                    )
                     MeasurementReadoutCard(
                         readingText = "${MeasurementUnitConverter.formatUmAsMm(uiState.engine.readingUm, 2, commaDecimal = true)} mm",
                         secondaryUnitText = "${MeasurementUnitConverter.formatUmAsInch(uiState.engine.readingUm)} in",
@@ -248,6 +254,7 @@ fun ManualMicrometerScreen(
                     if (uiState.learningMode == LearningMode.LEARN) {
                         StepGuideCard("Petunjuk Penggunaan", microSteps, uiState.activeStepIndex)
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -342,24 +349,16 @@ private fun ManualMicrometerControls(
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Allowed measurement kinds (Outside & Thickness; Inside shows educational compatibility guard)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
+            MeasurementModePillRow(
+                kinds = listOf(
                     MeasurementKind.OUTSIDE_DIAMETER,
                     MeasurementKind.THICKNESS,
                     MeasurementKind.INSIDE_DIAMETER
-                ).forEach { kind ->
-                    FilterChip(
-                        selected = uiState.engine.measurementKind == kind,
-                        onClick = { viewModel.setMeasurementKind(kind) },
-                        label = { Text(kind.shortLabel, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = OrangeAccent,
-                            selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f).testTag("micro_kind_${kind.name.lowercase()}")
-                    )
-                }
-            }
+                ),
+                selectedKind = uiState.engine.measurementKind,
+                onSelect = viewModel::setMeasurementKind,
+                testTagPrefix = "micro_kind"
+            )
 
             // Putar Thimble (+/-0.01 mm = 1 division; +/-0.5 mm = 1 full 360° pitch revolution)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

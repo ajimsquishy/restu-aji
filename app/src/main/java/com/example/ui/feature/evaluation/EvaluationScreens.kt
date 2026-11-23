@@ -327,7 +327,8 @@ fun QuizRunnerScreen(
                                     jawPositionUm = q.simulatedPositionUm,
                                     resolution = q.caliperResolution,
                                     workpieceContactUm = null
-                                )
+                                ),
+                                showCoincidentHighlight = checked
                             )
                         }
                         InstrumentType.MANUAL_MICROMETER -> {
@@ -335,7 +336,8 @@ fun QuizRunnerScreen(
                                 state = ManualMicrometerState(
                                     spindlePositionUm = q.simulatedPositionUm,
                                     workpieceContactUm = null
-                                )
+                                ),
+                                showReadingHighlight = checked
                             )
                         }
                         InstrumentType.DIGITAL_CALIPER -> {
@@ -461,6 +463,7 @@ fun QuizRunnerScreen(
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("quiz_next_button")
                     ) { Text(if (index + 1 < questions.size) "Soal Selanjutnya" else "Selesai & Simpan Nilai") }
                 }
+                Spacer(Modifier.height(16.dp))
             }
         }
     }

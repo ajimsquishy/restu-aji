@@ -18,8 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -58,6 +58,7 @@ import com.example.domain.model.MeasurementUnit
 import com.example.ui.components.DigitalMicrometerCanvas
 import com.example.ui.components.FaultSimulationBottomSheet
 import com.example.ui.components.MeasureLabTopBar
+import com.example.ui.components.MeasurementModePillRow
 import com.example.ui.components.MeasurementReadoutCard
 import com.example.ui.components.ToleranceStatusCard
 import com.example.ui.components.ToolCompatibilityAlertDialog
@@ -111,8 +112,8 @@ fun DigitalMicrometerScreen(
                         modifier = Modifier.minimumInteractiveComponentSize().testTag("digital_micro_fault_button")
                     ) {
                         Icon(
-                            Icons.Default.BugReport,
-                            contentDescription = "Fault Simulation",
+                            Icons.Default.Tune,
+                            contentDescription = "Simulasi Kesalahan",
                             tint = if (uiState.engine.faultConfig.hasAnyFault) OrangeAccent else Color.White
                         )
                     }
@@ -124,7 +125,6 @@ fun DigitalMicrometerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .navigationBarsPadding()
         ) {
             val isLandscape = maxWidth >= 680.dp
             if (isLandscape) {
@@ -189,6 +189,7 @@ fun DigitalMicrometerScreen(
                     )
                     DigitalMicrometerControls(uiState, viewModel) { showWorkpiecePicker = true }
                     uiState.toleranceEvaluation?.let { ToleranceStatusCard(it) }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -271,31 +272,22 @@ private fun DigitalMicrometerControls(
             }
 
             // Allowed measurement kinds
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
+            MeasurementModePillRow(
+                kinds = listOf(
                     MeasurementKind.OUTSIDE_DIAMETER,
                     MeasurementKind.THICKNESS,
                     MeasurementKind.DEPTH
-                ).forEach { kind ->
-                    FilterChip(
-                        selected = uiState.engine.measurementKind == kind,
-                        onClick = { viewModel.setMeasurementKind(kind) },
-                        label = { Text(kind.shortLabel, style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = OrangeAccent,
-                            selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+                ),
+                selectedKind = uiState.engine.measurementKind,
+                onSelect = viewModel::setMeasurementKind
+            )
 
             // Precision spindle step buttons (0.01 mm & 0.5 mm = 1 full revolution)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { viewModel.rotateDeltaUm(-500, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp)) { Text("−0,5") }
-                OutlinedButton(onClick = { viewModel.rotateDeltaUm(-10, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp).testTag("digital_micro_minus_10um")) { Text("−0,01") }
-                OutlinedButton(onClick = { viewModel.rotateDeltaUm(10, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp).testTag("digital_micro_plus_10um")) { Text("+0,01") }
-                OutlinedButton(onClick = { viewModel.rotateDeltaUm(500, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp)) { Text("+0,5") }
+                OutlinedButton(onClick = { viewModel.rotateDeltaUm(-500, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp)) { Text("−0,5", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false) }
+                OutlinedButton(onClick = { viewModel.rotateDeltaUm(-10, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp).testTag("digital_micro_minus_10um")) { Text("−0,01", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false) }
+                OutlinedButton(onClick = { viewModel.rotateDeltaUm(10, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp).testTag("digital_micro_plus_10um")) { Text("+0,01", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false) }
+                OutlinedButton(onClick = { viewModel.rotateDeltaUm(500, false) }, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.weight(1f).height(48.dp)) { Text("+0,5", style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false) }
             }
 
             // Ratchet, Lock, Reset, Benda
