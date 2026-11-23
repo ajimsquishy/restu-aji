@@ -72,7 +72,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
-import com.example.data.firebase.GoogleAuthManager
 import com.example.di.AppContainer
 import com.example.domain.auth.UserRole
 import com.example.domain.model.InstrumentType
@@ -614,9 +613,6 @@ fun DashboardScreen(
                     onClick = {
                         showAccountDialog = false
                         scope.launch {
-                            if (prefs.userRole == UserRole.TEACHER) {
-                                GoogleAuthManager.signOut(context)
-                            }
                             container.preferencesStore.logout()
                             withContext(Dispatchers.Main.immediate) {
                                 onLogout()

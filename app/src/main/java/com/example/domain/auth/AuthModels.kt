@@ -120,12 +120,87 @@ object AuthValidator {
     ): String? {
         val cleanClass = teachingClass.trim()
         if (cleanClass.length < 2 || cleanClass.length > 30) {
-            return "Pilih atau ketik kelas yang diajar terlebih dahulu."
+            return "Pilih kelas yang diajar terlebih dahulu."
         }
-        if (password.isEmpty()) {
-            return "Password guru wajib diisi."
+        if (!ClassTeacherAuth.isSupportedClass(cleanClass)) {
+            return "Pilih salah satu kelas resmi: ${teacherClassPresets.joinToString(", ")}."
+        }
+        if (password.trim().isEmpty()) {
+            return "Password autentikasi kelas wajib diisi."
         }
         return null
+    }
+}
+
+/**
+ * Offline per-class teacher authentication using salted SHA-256 hashes.
+ * Plaintext class passwords are never stored in Kotlin source code; they are documented
+ * separately in Password_Guru_MeasureLab.pdf in the project root folder.
+ */
+object ClassTeacherAuth {
+    private data class ClassCredentialHash(
+        val canonicalClass: String,
+        val salt: String,
+        val sha256Hex: String
+    )
+
+    private val credentials: List<ClassCredentialHash> = listOf(
+        ClassCredentialHash(
+            canonicalClass = "X TP 1",
+            salt = "mlab_salt_xtp1_2026",
+            sha256Hex = "9b47776890bd0cb9551704a16d4d16f48d3a04721381b023260cce2ec3b58824"
+        ),
+        ClassCredentialHash(
+            canonicalClass = "X TP 2",
+            salt = "mlab_salt_xtp2_2026",
+            sha256Hex = "fc62404ab39e100fd2e906edab3702ec5669bbd7cffbd3af05fe0b4a57d215d8"
+        ),
+        ClassCredentialHash(
+            canonicalClass = "X TP 3",
+            salt = "mlab_salt_xtp3_2026",
+            sha256Hex = "1ea1de6344f6435a41b2fa9337acbf2cbae67e7225cbfd069577fff500d23880"
+        ),
+        ClassCredentialHash(
+            canonicalClass = "X TP 4",
+            salt = "mlab_salt_xtp4_2026",
+            sha256Hex = "adca571444402cbfbdb7844fc84d9404768ce0a6f59ac26db6bcbe6f7c1fd458"
+        ),
+        ClassCredentialHash(
+            canonicalClass = "Semua Kelas X TP",
+            salt = "mlab_salt_all_2026",
+            sha256Hex = "6b8bdfb278f1898b1b704415625a3ffbc4a957460c9149ffb104a799ef75235f"
+        )
+    )
+
+    val supportedClasses: List<String> = credentials.map { it.canonicalClass }
+
+    fun canonicalClassOrNull(className: String): String? {
+        val cleaned = className.trim()
+        return credentials.firstOrNull { it.canonicalClass.equals(cleaned, ignoreCase = true) }?.canonicalClass
+    }
+
+    fun isSupportedClass(className: String): Boolean = canonicalClassOrNull(className) != null
+
+    fun verifyClassPassword(className: String, rawPassword: String): Boolean {
+        val entry = credentials.firstOrNull { it.canonicalClass.equals(className.trim(), ignoreCase = true) }
+            ?: return false
+        val cleanedPassword = rawPassword.trim()
+        if (cleanedPassword.isEmpty()) return false
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("${entry.salt}:$cleanedPassword".toByteArray(Charsets.UTF_8))
+        val expected = hexToBytes(entry.sha256Hex) ?: return false
+        return MessageDigest.isEqual(expected, digest)
+    }
+
+    private fun hexToBytes(hex: String): ByteArray? {
+        if (hex.length % 2 != 0 || hex.isEmpty()) return null
+        return try {
+            ByteArray(hex.length / 2) { idx ->
+                hex.substring(idx * 2, idx * 2 + 2).toInt(16).toByte()
+            }
+        } catch (_: NumberFormatException) {
+            null
+        }
     }
 }
 

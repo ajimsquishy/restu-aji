@@ -40,16 +40,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.data.firebase.GoogleAuthManager
 import com.example.data.local.preferences.UserPreferences
 import com.example.di.AppContainer
 import com.example.domain.auth.UserRole
 import com.example.domain.model.EvaluationCategory
 import com.example.domain.model.InstrumentType
-import com.example.ui.feature.admin.AdminDashboardScreen
 import com.example.ui.feature.ai.MetrologyTutorScreen
 import com.example.ui.feature.auth.AuthGateScreen
-import com.example.ui.feature.auth.TeacherActivationScreen
 import com.example.ui.feature.calibration.CalibrationScreen
 import com.example.ui.feature.caliper.DigitalCaliperScreen
 import com.example.ui.feature.caliper.ManualCaliperScreen
@@ -71,10 +68,7 @@ import com.example.ui.theme.NavyPrimary
 import com.example.ui.theme.OrangeAccent
 import com.example.ui.theme.OrangeContainer
 import com.example.ui.theme.TextSecondary
-import com.google.firebase.firestore.FirebaseFirestoreException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -82,8 +76,6 @@ import kotlinx.coroutines.withContext
 object MeasureLabRoutes {
     const val SPLASH = "splash"
     const val AUTH_GATE = "auth_gate"
-    const val TEACHER_ACTIVATION = "teacher_activation"
-    const val ADMIN_DASHBOARD = "admin_dashboard"
     const val DASHBOARD = "dashboard"
     const val WORKPIECE_LAB = "workpiece_lab"
     const val LEARNING_HUB = "learning_hub"
@@ -134,48 +126,10 @@ fun MeasureLabApp(
     skipSplash: Boolean = false,
     skipAuth: Boolean = false
 ) {
-    val context = LocalContext.current
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val prefs by container.preferencesStore.preferencesFlow.collectAsStateWithLifecycle(
-        initialValue = UserPreferences()
-    )
-    var authNoticeMessage by remember { mutableStateOf<String?>(null) }
-
-    // Real-time enforcement: if Admin Utama disables an active Firebase teacher mid-session,
-    // sign them out immediately and return them to AuthGateScreen with a clear message.
-    LaunchedEffect(prefs.userRole, prefs.teacherUid) {
-        if (prefs.userRole == UserRole.TEACHER && prefs.teacherUid.isNotBlank()) {
-            val signedInUid = GoogleAuthManager.currentUser()?.uid
-            if (signedInUid == prefs.teacherUid) {
-                container.teacherActivationRepository
-                    .observeTeacherAccount(prefs.teacherUid)
-                    .catch { error ->
-                        val firestoreError = generateSequence(error) { it.cause }
-                            .filterIsInstance<FirebaseFirestoreException>()
-                            .firstOrNull()
-                        if (firestoreError == null && error is CancellationException) throw error
-                        Log.w("MeasureLabNav", "Teacher status observer warning", firestoreError ?: error)
-                    }
-                    .collect { account ->
-                        if (account != null && !account.accountIsActive()) {
-                            GoogleAuthManager.signOut(context)
-                            container.preferencesStore.logout()
-                            withContext(Dispatchers.Main.immediate) {
-                                authNoticeMessage =
-                                    "Akun guru Anda telah dinonaktifkan oleh Admin Utama sehingga sesi dihentikan."
-                                navController.navigate(MeasureLabRoutes.AUTH_GATE) {
-                                    popUpTo(0) { inclusive = true }
-                                    launchSingleTop = true
-                                }
-                            }
-                        }
-                    }
-            }
-        }
-    }
 
     val primaryTabs = listOf(
         TopLevelTab(MeasureLabRoutes.DASHBOARD, "Beranda", Icons.Default.Home, "nav_tab_home"),
@@ -274,32 +228,10 @@ fun MeasureLabApp(
                             onFinished = {
                                 scope.launch {
                                     val savedPrefs = container.preferencesStore.preferencesFlow.first()
-                                    val nextRoute = when {
-                                        skipAuth -> MeasureLabRoutes.DASHBOARD
-                                        savedPrefs.userRole == UserRole.STUDENT && savedPrefs.session.isAuthenticated ->
-                                            MeasureLabRoutes.DASHBOARD
-                                        savedPrefs.userRole == UserRole.TEACHER && savedPrefs.teacherUid.isNotBlank() -> {
-                                            val firebaseUser = GoogleAuthManager.currentUser()
-                                            if (firebaseUser != null && firebaseUser.uid == savedPrefs.teacherUid) {
-                                                val check = container.teacherActivationRepository.fetchSignedInTeacherProfile()
-                                                val profile = check.getOrNull()
-                                                if (profile != null && profile.accountIsActive()) {
-                                                    MeasureLabRoutes.DASHBOARD
-                                                } else {
-                                                    GoogleAuthManager.signOut(context)
-                                                    container.preferencesStore.logout()
-                                                    if (profile != null && !profile.accountIsActive()) {
-                                                        authNoticeMessage =
-                                                            "Akun guru Anda dinonaktifkan oleh Admin Utama dan tidak dapat login."
-                                                    }
-                                                    MeasureLabRoutes.AUTH_GATE
-                                                }
-                                            } else {
-                                                container.preferencesStore.logout()
-                                                MeasureLabRoutes.AUTH_GATE
-                                            }
-                                        }
-                                        else -> MeasureLabRoutes.AUTH_GATE
+                                    val nextRoute = if (skipAuth || savedPrefs.session.isAuthenticated) {
+                                        MeasureLabRoutes.DASHBOARD
+                                    } else {
+                                        MeasureLabRoutes.AUTH_GATE
                                     }
                                     withContext(Dispatchers.Main.immediate) {
                                         navController.navigate(nextRoute) {
@@ -314,35 +246,11 @@ fun MeasureLabApp(
                     composable(MeasureLabRoutes.AUTH_GATE) {
                         AuthGateScreen(
                             container = container,
-                            initialNotice = authNoticeMessage,
                             onAuthenticated = {
-                                authNoticeMessage = null
                                 navController.navigate(MeasureLabRoutes.DASHBOARD) {
                                     popUpTo(MeasureLabRoutes.AUTH_GATE) { inclusive = true }
                                 }
-                            },
-                            onOpenTeacherActivation = {
-                                authNoticeMessage = null
-                                navController.navigate(MeasureLabRoutes.TEACHER_ACTIVATION)
-                            },
-                            onOpenAdminDashboard = {
-                                authNoticeMessage = null
-                                navController.navigate(MeasureLabRoutes.ADMIN_DASHBOARD)
                             }
-                        )
-                    }
-
-                    composable(MeasureLabRoutes.TEACHER_ACTIVATION) {
-                        TeacherActivationScreen(
-                            container = container,
-                            onBackToLogin = { navController.popBackStack() }
-                        )
-                    }
-
-                    composable(MeasureLabRoutes.ADMIN_DASHBOARD) {
-                        AdminDashboardScreen(
-                            container = container,
-                            onBack = { navController.popBackStack() }
                         )
                     }
 

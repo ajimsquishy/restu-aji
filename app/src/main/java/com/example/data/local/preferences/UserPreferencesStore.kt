@@ -164,25 +164,27 @@ class UserPreferencesStore(private val context: Context) {
         if (validationError != null) {
             return Result.failure(IllegalArgumentException(validationError))
         }
-        val current = preferencesFlow.first()
-        if (!current.isTeacherPasswordConfigured) {
-            return Result.failure(IllegalStateException("Password guru belum dibuat. Silakan atur password terlebih dahulu."))
+        val canonicalClass = com.example.domain.auth.ClassTeacherAuth.canonicalClassOrNull(teachingClass)
+            ?: return Result.failure(IllegalArgumentException("Kelas tidak dikenali. Pilih salah satu kelas resmi."))
+        if (!com.example.domain.auth.ClassTeacherAuth.verifyClassPassword(canonicalClass, password)) {
+            return Result.failure(
+                SecurityException("Password autentikasi untuk kelas $canonicalClass tidak sesuai. Periksa daftar password pada file Password_Guru_MeasureLab.pdf.")
+            )
         }
-        if (!PasswordHasher.verifyPassword(password, current.teacherPasswordHash)) {
-            return Result.failure(SecurityException("Password guru tidak sesuai. Periksa kembali password Anda."))
-        }
-        val cleanClass = teachingClass.trim()
         val session = AuthSession(
             role = UserRole.TEACHER,
             studentName = "",
             studentAttendance = "",
-            className = cleanClass
+            className = canonicalClass
         )
         context.measureLabDataStore.edit { prefs ->
             prefs[Keys.USER_ROLE] = UserRole.TEACHER.name
             prefs[Keys.STUDENT_NAME] = ""
             prefs[Keys.STUDENT_ATTENDANCE] = ""
-            prefs[Keys.ACTIVE_CLASS_NAME] = cleanClass
+            prefs[Keys.ACTIVE_CLASS_NAME] = canonicalClass
+            prefs[Keys.TEACHER_UID] = ""
+            prefs[Keys.TEACHER_FULL_NAME] = ""
+            prefs[Keys.TEACHER_EMAIL] = ""
             prefs[Keys.PARTICIPANT_CODE] = session.participantIdentifier
         }
         return Result.success(session)

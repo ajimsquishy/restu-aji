@@ -68,11 +68,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.catalog.WorkpieceCatalog
-import com.example.data.firebase.GoogleAuthManager
-import com.example.data.firebase.GoogleSignInOutcome
 import com.example.data.local.preferences.UserPreferences
 import com.example.di.AppContainer
-import com.example.domain.auth.AuthValidator
+import com.example.domain.auth.ClassTeacherAuth
 import com.example.domain.auth.UserRole
 import com.example.domain.engine.MeasurementUnitConverter
 import com.example.domain.engine.ToolCompatibilityGuard
@@ -113,6 +111,9 @@ fun TeacherModeScreen(
     val scope = rememberCoroutineScope()
 
     val isTeacherAuthenticated = prefs.userRole == UserRole.TEACHER
+    var selectedGateClass by remember { mutableStateOf(ClassTeacherAuth.supportedClasses.first()) }
+    var gatePassword by remember { mutableStateOf("") }
+    var showGatePassword by remember { mutableStateOf(false) }
     var isSigningInTeacher by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -121,10 +122,9 @@ fun TeacherModeScreen(
 
     val activeTeacherClass = prefs.activeClassName.ifBlank { "Semua Kelas X TP" }
     val teacherHeaderSubtitle = if (isTeacherAuthenticated) {
-        val namePrefix = prefs.teacherFullName.takeIf { it.isNotBlank() }?.let { "$it • " } ?: ""
-        "${namePrefix}Mengajar: $activeTeacherClass"
+        "Mengajar: $activeTeacherClass"
     } else {
-        "Verifikasi Akun Guru Teraktivasi"
+        "Autentikasi Password Kelas Guru"
     }
 
     Scaffold(
@@ -139,7 +139,6 @@ fun TeacherModeScreen(
                         IconButton(
                             onClick = {
                                 scope.launch {
-                                    GoogleAuthManager.signOut(context)
                                     container.preferencesStore.logout()
                                     withContext(Dispatchers.Main.immediate) {
                                         onLogout()
@@ -176,15 +175,60 @@ fun TeacherModeScreen(
                 }
                 Spacer(Modifier.height(14.dp))
                 Text(
-                    text = "Akses Khusus Akun Guru",
+                    text = "Akses Khusus Guru Kelas",
                     style = MaterialTheme.typography.headlineSmall,
                     color = NavyPrimary
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "Hanya guru yang sudah diaktivasi menggunakan kode dari Admin Utama yang dapat membuka Panel Guru untuk mengelola tugas dan analitik siswa.",
+                    text = "Pilih kelas yang diajar lalu masukkan password autentikasi kelas tersebut untuk membuka Panel Guru.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
+                )
+                Spacer(Modifier.height(14.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(ClassTeacherAuth.supportedClasses) { preset ->
+                        val selected = selectedGateClass == preset
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                selectedGateClass = preset
+                                authError = null
+                            },
+                            label = { Text(preset) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = OrangeAccent,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = gatePassword,
+                    onValueChange = {
+                        gatePassword = it
+                        authError = null
+                    },
+                    label = { Text("Password Kelas $selectedGateClass") },
+                    leadingIcon = { Icon(Icons.Default.Key, contentDescription = "Password", tint = OrangeAccent) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { showGatePassword = !showGatePassword },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Icon(
+                                imageVector = if (showGatePassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (showGatePassword) "Sembunyikan" else "Tampilkan"
+                            )
+                        }
+                    },
+                    visualTransformation = if (showGatePassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("teacher_gate_password_input")
                 )
                 if (authError != null) {
                     Spacer(Modifier.height(10.dp))
@@ -202,55 +246,16 @@ fun TeacherModeScreen(
                         isSigningInTeacher = true
                         authError = null
                         scope.launch {
-                            when (val outcome = GoogleAuthManager.signInWithGoogleInteractive(context)) {
-                                is GoogleSignInOutcome.Success -> {
-                                    val profileRes = container.teacherActivationRepository.fetchSignedInTeacherProfile()
-                                    profileRes.onSuccess { teacher ->
-                                        when {
-                                            teacher == null -> {
-                                                GoogleAuthManager.signOut(context)
-                                                withContext(Dispatchers.Main.immediate) {
-                                                    isSigningInTeacher = false
-                                                    authError = "Akun Google ini belum diaktivasi sebagai guru. Keluar ke halaman login lalu pilih 'Aktivasi Akun Guru'."
-                                                }
-                                            }
-                                            !teacher.accountIsActive() -> {
-                                                GoogleAuthManager.signOut(context)
-                                                withContext(Dispatchers.Main.immediate) {
-                                                    isSigningInTeacher = false
-                                                    authError = "Akun guru Anda sedang dinonaktifkan oleh Admin Utama."
-                                                }
-                                            }
-                                            else -> {
-                                                container.preferencesStore.saveFirebaseTeacherSession(
-                                                    uid = teacher.uid,
-                                                    fullName = teacher.fullName,
-                                                    email = teacher.email,
-                                                    teachingClass = teacher.teachingClass
-                                                )
-                                                withContext(Dispatchers.Main.immediate) {
-                                                    isSigningInTeacher = false
-                                                }
-                                            }
-                                        }
-                                    }.onFailure { err ->
-                                        GoogleAuthManager.signOut(context)
-                                        withContext(Dispatchers.Main.immediate) {
-                                            isSigningInTeacher = false
-                                            authError = err.message ?: "Gagal memverifikasi akun guru."
-                                        }
-                                    }
-                                }
-                                GoogleSignInOutcome.Cancelled -> {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        isSigningInTeacher = false
-                                    }
-                                }
-                                is GoogleSignInOutcome.Error -> {
-                                    withContext(Dispatchers.Main.immediate) {
-                                        isSigningInTeacher = false
-                                        authError = outcome.message
-                                    }
+                            val res = container.preferencesStore.loginTeacher(
+                                teachingClass = selectedGateClass,
+                                password = gatePassword
+                            )
+                            withContext(Dispatchers.Main.immediate) {
+                                isSigningInTeacher = false
+                                res.onSuccess {
+                                    gatePassword = ""
+                                }.onFailure { err ->
+                                    authError = err.message ?: "Password autentikasi kelas tidak sesuai."
                                 }
                             }
                         }
@@ -259,9 +264,9 @@ fun TeacherModeScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = NavyPrimary),
                     modifier = Modifier.fillMaxWidth().height(50.dp).testTag("teacher_unlock_button")
                 ) {
-                    Icon(Icons.Default.Lock, contentDescription = "Masuk Guru")
+                    Icon(Icons.Default.Lock, contentDescription = "Buka Panel Guru")
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isSigningInTeacher) "Memverifikasi..." else "Masuk Guru dengan Google")
+                    Text(if (isSigningInTeacher) "Memverifikasi..." else "Buka Panel Guru")
                 }
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(
@@ -275,7 +280,7 @@ fun TeacherModeScreen(
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Kembali ke Halaman Login / Aktivasi Guru")
+                    Text("Kembali ke Halaman Login")
                 }
             }
         } else {

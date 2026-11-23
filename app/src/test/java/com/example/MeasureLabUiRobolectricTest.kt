@@ -108,7 +108,7 @@ class MeasureLabUiRobolectricTest {
     }
 
     @Test
-    fun teacherAuthNavigation_opensActivationAndSeparatedAdminGate_andUnlockedTeacherPanel() {
+    fun teacherClassPasswordLogin_rejectsWrongPassword_acceptsExactClassPassword_andOpensTeacherPanel() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val container = AppContainer(context)
 
@@ -121,62 +121,21 @@ class MeasureLabUiRobolectricTest {
         composeRule.onNodeWithTag("auth_tab_teacher").performClick()
         composeRule.waitForIdle()
 
-        // Teacher tab exposes Google Sign-In + Aktivasi Akun Guru (no universal password)
-        composeRule.onNodeWithTag("auth_teacher_google_signin_button").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("auth_open_teacher_activation_button").performScrollTo().performClick()
+        // Select class X TP 2 and enter wrong password (e.g. X TP 1's password) -> must show error
+        composeRule.onNodeWithTag("auth_teacher_class_chip_X_TP_2").performScrollTo().performClick()
+        composeRule.onNodeWithTag("auth_teacher_password_input").performScrollTo().performTextClearance()
+        composeRule.onNodeWithTag("auth_teacher_password_input").performTextInput("MLAB-XTP1-4829")
+        composeRule.onNodeWithTag("auth_teacher_submit_button").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("teacher_activation_screen").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag("auth_error_banner").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithTag("teacher_activation_screen").assertIsDisplayed()
-        composeRule.onNodeWithTag("activation_submit_button").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("activation_error_banner").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("auth_error_banner").performScrollTo().assertIsDisplayed()
 
-        // Navigate back to AuthGate and open separated Admin Utama Login Gate
-        composeRule.onNodeWithTag("top_bar_back_button").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("auth_gate_screen").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithTag("auth_open_admin_dashboard_button").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("admin_login_gate").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithTag("admin_google_signin_button").assertIsDisplayed()
+        // Enter exact class X TP 2 password -> enters Dashboard with Teacher Panel CTA
+        composeRule.onNodeWithTag("auth_teacher_password_input").performScrollTo().performTextClearance()
+        composeRule.onNodeWithTag("auth_teacher_password_input").performTextInput("MLAB-XTP2-7394")
+        composeRule.onNodeWithTag("auth_teacher_submit_button").performScrollTo().performClick()
 
-        // Return to AuthGate, persist an activated Firebase teacher session, and verify Panel Guru opens unlocked
-        composeRule.onNodeWithTag("top_bar_back_button").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("auth_gate_screen").fetchSemanticsNodes().isNotEmpty()
-        }
-        runBlocking {
-            container.preferencesStore.saveFirebaseTeacherSession(
-                uid = "teacher_uid_001",
-                fullName = "Budi Santoso, S.Pd",
-                email = "budi.guru@smk-tp.sch.id",
-                teachingClass = "X TP 3"
-            )
-        }
-        composeRule.waitForIdle()
-    }
-
-    @Test
-    fun authenticatedFirebaseTeacher_opensTeacherPanelUnlocked_andCanLogout() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val container = AppContainer(context)
-        runBlocking {
-            container.preferencesStore.saveFirebaseTeacherSession(
-                uid = "teacher_uid_001",
-                fullName = "Budi Santoso, S.Pd",
-                email = "budi.guru@smk-tp.sch.id",
-                teachingClass = "X TP 3"
-            )
-        }
-
-        composeRule.setContent {
-            MeasureLabTheme {
-                MeasureLabApp(container = container, skipSplash = true, skipAuth = true)
-            }
-        }
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("dashboard_open_teacher_panel_cta").fetchSemanticsNodes().isNotEmpty()
         }
@@ -186,7 +145,7 @@ class MeasureLabUiRobolectricTest {
         }
         composeRule.onNodeWithTag("teacher_mode_content").assertIsDisplayed()
 
-        // Logout returns cleanly to AuthGate
+        // Logout returns cleanly to AuthGate offline
         composeRule.onNodeWithTag("teacher_logout_button").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("auth_gate_screen").fetchSemanticsNodes().isNotEmpty()

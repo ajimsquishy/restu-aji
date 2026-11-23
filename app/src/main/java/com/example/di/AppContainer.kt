@@ -1,7 +1,6 @@
 package com.example.di
 
 import android.content.Context
-import com.example.data.firebase.TeacherActivationRepository
 import com.example.data.local.MeasureLabDatabase
 import com.example.data.local.preferences.UserPreferencesStore
 import com.example.data.repository.EvaluationRepository
@@ -29,9 +28,7 @@ class AppContainer(context: Context) {
     val workpieceRepository = WorkpieceRepository(database.customWorkpieceDao())
     val teacherTaskRepository = TeacherTaskRepository(database.teacherTaskDao())
     val evaluationRepository = EvaluationRepository(database.evaluationAttemptDao())
-    val teacherActivationRepository: TeacherActivationRepository by lazy {
-        TeacherActivationRepository(appContext)
-    }
+
 
     private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

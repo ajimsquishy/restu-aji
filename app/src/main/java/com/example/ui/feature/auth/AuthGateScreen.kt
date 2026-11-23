@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,15 +34,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Class
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,10 +50,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,22 +72,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
-import com.example.data.firebase.GoogleAuthManager
-import com.example.data.firebase.GoogleSignInOutcome
 import com.example.data.local.preferences.UserPreferences
 import com.example.di.AppContainer
 import com.example.domain.auth.AuthValidator
+import com.example.domain.auth.ClassTeacherAuth
 import com.example.domain.auth.UserRole
 import com.example.ui.theme.CyanHighlight
 import com.example.ui.theme.LabBackground
@@ -94,7 +95,6 @@ import com.example.ui.theme.LabOutline
 import com.example.ui.theme.NavyDark
 import com.example.ui.theme.NavyPrimary
 import com.example.ui.theme.OrangeAccent
-import com.example.ui.theme.OrangeContainer
 import com.example.ui.theme.TealSecondary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.ToleranceRed
@@ -103,15 +103,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AuthGateScreen(
     container: AppContainer,
     initialNotice: String? = null,
-    onAuthenticated: (UserRole) -> Unit,
-    onOpenTeacherActivation: () -> Unit = {},
-    onOpenAdminDashboard: () -> Unit = {}
+    onAuthenticated: (UserRole) -> Unit
 ) {
-    val context = LocalContext.current
     val prefs by container.preferencesStore.preferencesFlow.collectAsStateWithLifecycle(
         initialValue = UserPreferences()
     )
@@ -119,7 +117,7 @@ fun AuthGateScreen(
 
     var selectedRole by rememberSaveable { mutableStateOf(UserRole.STUDENT) }
 
-    // Student fields (preserved 100%)
+    // Student fields
     var studentName by rememberSaveable { mutableStateOf(prefs.studentName) }
     var studentAttendance by rememberSaveable { mutableStateOf(prefs.studentAttendance) }
     var studentClass by rememberSaveable {
@@ -131,6 +129,19 @@ fun AuthGateScreen(
             }
         )
     }
+
+    // Teacher per-class password fields (no Google Sign-In required)
+    var teacherClass by rememberSaveable {
+        mutableStateOf(
+            if (prefs.userRole == UserRole.TEACHER && ClassTeacherAuth.isSupportedClass(prefs.activeClassName)) {
+                prefs.activeClassName
+            } else {
+                ClassTeacherAuth.supportedClasses.first()
+            }
+        )
+    }
+    var teacherPassword by rememberSaveable { mutableStateOf("") }
+    var showPassword by rememberSaveable { mutableStateOf(false) }
 
     var errorMessage by remember(initialNotice) { mutableStateOf(initialNotice) }
     var isSubmitting by remember { mutableStateOf(false) }
@@ -259,7 +270,7 @@ fun AuthGateScreen(
                         )
                         RoleSwitchButton(
                             label = "Akses Guru",
-                            subtitle = "Akun Teraktivasi",
+                            subtitle = "Kelas • Password",
                             icon = Icons.Default.School,
                             selected = selectedRole == UserRole.TEACHER,
                             activeColor = OrangeAccent,
@@ -476,13 +487,13 @@ fun AuthGateScreen(
                                 }
                             }
                         } else {
-                            // Teacher Login via Firebase Auth (Google Sign-In) + Cloud Firestore Verification
+                            // Offline Per-Class Teacher Password Login
                             Column(
                                 modifier = Modifier.padding(18.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    text = "Login Guru Teraktivasi",
+                                    text = "Masuk Guru Pengampu",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = NavyPrimary,
                                     fontWeight = FontWeight.Bold
@@ -500,17 +511,81 @@ fun AuthGateScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Shield,
-                                            contentDescription = "Keamanan Guru",
+                                            contentDescription = "Autentikasi Kelas",
                                             tint = NavyPrimary,
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Text(
-                                            text = "Guru yang sudah mengaktifkan akun cukup login menggunakan akun Google masing-masing tanpa memasukkan kode aktivasi lagi.",
+                                            text = "Pilih kelas yang diajar lalu masukkan password autentikasi khusus kelas tersebut (100% offline, tanpa akun Google).",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = NavyPrimary
                                         )
                                     }
                                 }
+
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Pilih Kelas yang Diajar",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = NavyPrimary
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        ClassTeacherAuth.supportedClasses.forEach { preset ->
+                                            val selected = teacherClass.equals(preset, ignoreCase = true)
+                                            FilterChip(
+                                                selected = selected,
+                                                onClick = {
+                                                    teacherClass = preset
+                                                    errorMessage = null
+                                                },
+                                                label = { Text(preset) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = OrangeAccent,
+                                                    selectedLabelColor = Color.White
+                                                ),
+                                                modifier = Modifier.testTag("auth_teacher_class_chip_${preset.replace(" ", "_")}")
+                                            )
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = teacherPassword,
+                                    onValueChange = {
+                                        teacherPassword = it
+                                        errorMessage = null
+                                    },
+                                    label = { Text("Password Kelas $teacherClass") },
+                                    placeholder = { Text("Masukkan password kelas...") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Lock, contentDescription = "Password", tint = OrangeAccent)
+                                    },
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = { showPassword = !showPassword },
+                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                        ) {
+                                            Icon(
+                                                imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = if (showPassword) "Sembunyikan Password" else "Tampilkan Password"
+                                            )
+                                        }
+                                    },
+                                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Password,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("auth_teacher_password_input")
+                                )
+
+                                Spacer(Modifier.height(4.dp))
 
                                 Button(
                                     onClick = {
@@ -518,58 +593,18 @@ fun AuthGateScreen(
                                         isSubmitting = true
                                         errorMessage = null
                                         scope.launch {
-                                            when (val outcome = GoogleAuthManager.signInWithGoogleInteractive(context)) {
-                                                is GoogleSignInOutcome.Success -> {
-                                                    val profileRes = container.teacherActivationRepository.fetchSignedInTeacherProfile()
-                                                    profileRes.onSuccess { teacher ->
-                                                        when {
-                                                            teacher == null -> {
-                                                                GoogleAuthManager.signOut(context)
-                                                                withContext(Dispatchers.Main.immediate) {
-                                                                    isSubmitting = false
-                                                                    errorMessage = "Akun Google ini belum diaktivasi sebagai guru. Silakan klik 'Aktivasi Akun Guru' dan masukkan kode aktivasi dari Admin Utama."
-                                                                }
-                                                            }
-                                                            !teacher.accountIsActive() -> {
-                                                                GoogleAuthManager.signOut(context)
-                                                                container.preferencesStore.logout()
-                                                                withContext(Dispatchers.Main.immediate) {
-                                                                    isSubmitting = false
-                                                                    errorMessage = "Akun guru Anda telah dinonaktifkan oleh Admin Utama dan tidak dapat login atau menggunakan aplikasi."
-                                                                }
-                                                            }
-                                                            else -> {
-                                                                container.preferencesStore.saveFirebaseTeacherSession(
-                                                                    uid = teacher.uid,
-                                                                    fullName = teacher.fullName,
-                                                                    email = teacher.email,
-                                                                    teachingClass = teacher.teachingClass
-                                                                )
-                                                                withContext(Dispatchers.Main.immediate) {
-                                                                    isSubmitting = false
-                                                                    onAuthenticated(UserRole.TEACHER)
-                                                                }
-                                                            }
-                                                        }
-                                                    }.onFailure { err ->
-                                                        GoogleAuthManager.signOut(context)
-                                                        withContext(Dispatchers.Main.immediate) {
-                                                            isSubmitting = false
-                                                            errorMessage = err.message
-                                                                ?: "Gagal memverifikasi akun guru di server."
-                                                        }
-                                                    }
-                                                }
-                                                GoogleSignInOutcome.Cancelled -> {
-                                                    withContext(Dispatchers.Main.immediate) {
-                                                        isSubmitting = false
-                                                    }
-                                                }
-                                                is GoogleSignInOutcome.Error -> {
-                                                    withContext(Dispatchers.Main.immediate) {
-                                                        isSubmitting = false
-                                                        errorMessage = outcome.message
-                                                    }
+                                            val result = container.preferencesStore.loginTeacher(
+                                                teachingClass = teacherClass,
+                                                password = teacherPassword
+                                            )
+                                            withContext(Dispatchers.Main.immediate) {
+                                                isSubmitting = false
+                                                result.onSuccess {
+                                                    teacherPassword = ""
+                                                    onAuthenticated(UserRole.TEACHER)
+                                                }.onFailure { err ->
+                                                    errorMessage = err.message
+                                                        ?: "Password autentikasi kelas tidak sesuai."
                                                 }
                                             }
                                         }
@@ -580,7 +615,7 @@ fun AuthGateScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(52.dp)
-                                        .testTag("auth_teacher_google_signin_button")
+                                        .testTag("auth_teacher_submit_button")
                                 ) {
                                     if (isSubmitting) {
                                         CircularProgressIndicator(
@@ -589,108 +624,15 @@ fun AuthGateScreen(
                                             modifier = Modifier.size(20.dp)
                                         )
                                     } else {
-                                        Icon(Icons.Default.VerifiedUser, contentDescription = "Login Guru Google")
+                                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = "Masuk Guru")
                                         Spacer(Modifier.width(8.dp))
                                         Text(
-                                            text = "Masuk Guru dengan Google",
+                                            text = "Masuk sebagai Guru",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
-
-                                HorizontalDivider(color = LabOutline)
-
-                                Surface(
-                                    color = OrangeContainer,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "Guru Baru? Punya Kode Aktivasi?",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = NavyPrimary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "Aktifkan akun guru Anda sekali saja menggunakan kode unik (GURU-XXXX-XXXX) yang diberikan oleh Admin Utama sekolah.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = NavyPrimary.copy(alpha = 0.85f)
-                                        )
-                                        OutlinedButton(
-                                            onClick = onOpenTeacherActivation,
-                                            enabled = !isSubmitting,
-                                            border = BorderStroke(1.5.dp, OrangeAccent),
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(48.dp)
-                                                .testTag("auth_open_teacher_activation_button")
-                                        ) {
-                                            Icon(Icons.Default.VpnKey, contentDescription = "Aktivasi Guru", tint = OrangeAccent)
-                                            Spacer(Modifier.width(8.dp))
-                                            Text(
-                                                text = "Aktivasi Akun Guru",
-                                                color = OrangeAccent,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Strictly Separated Primary Admin Portal Entry
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, LabOutline),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(enabled = !isSubmitting, onClick = onOpenAdminDashboard)
-                        .testTag("auth_open_admin_dashboard_button")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 13.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Surface(
-                                color = NavyPrimary.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AdminPanelSettings,
-                                    contentDescription = "Admin Utama",
-                                    tint = NavyPrimary,
-                                    modifier = Modifier.padding(8.dp).size(20.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Dashboard Admin Utama",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = NavyPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Halaman khusus pemilik untuk kode aktivasi & status guru",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSecondary
-                                )
                             }
                         }
                     }
@@ -718,34 +660,31 @@ private fun RoleSwitchButton(
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (selected) Color.White else NavyPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (selected) Color.White else TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Column {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = if (selected) Color.White else NavyPrimary,
                     fontWeight = FontWeight.Bold
                 )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) Color.White.copy(alpha = 0.88f) else TextSecondary
+                )
             }
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) Color.White.copy(alpha = 0.88f) else TextSecondary,
-                maxLines = 1
-            )
         }
     }
 }

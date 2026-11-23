@@ -86,32 +86,26 @@ class AuthModelsTest {
     }
 
     @Test
-    fun activationCodeGenerator_producesUniqueValidHashed7DayCodes() {
-        val generated = (1..200).map { com.example.domain.auth.ActivationCodeGenerator.generateCode() }.toSet()
-        assertEquals("All 200 generated codes must be unique", 200, generated.size)
+    fun classTeacherAuth_verifiesExactClassPasswordsAndRejectsCrossClassOrWrongPasswords() {
+        val validPairs = listOf(
+            "X TP 1" to "MLAB-XTP1-4829",
+            "X TP 2" to "MLAB-XTP2-7394",
+            "X TP 3" to "MLAB-XTP3-6158",
+            "X TP 4" to "MLAB-XTP4-9273",
+            "Semua Kelas X TP" to "MLAB-KOOR-5046"
+        )
 
-        generated.forEach { code ->
-            assertTrue("Code must match GURU-XXXX-XXXX: $code", com.example.domain.auth.ActivationCodeGenerator.isValidFormat(code))
-            val hash = com.example.domain.auth.ActivationCodeGenerator.sha256Hex(code)
-            assertEquals(64, hash.length)
-            assertTrue(hash.matches(Regex("^[a-f0-9]{64}$")))
-            assertTrue(com.example.domain.auth.ActivationCodeGenerator.maskedHint(code).startsWith("GURU-****-"))
+        validPairs.forEach { (cls, pwd) ->
+            assertTrue("Expected supported class $cls", com.example.domain.auth.ClassTeacherAuth.isSupportedClass(cls))
+            assertTrue("Expected valid password for $cls", com.example.domain.auth.ClassTeacherAuth.verifyClassPassword(cls, pwd))
+            assertFalse("Wrong password must fail for $cls", com.example.domain.auth.ClassTeacherAuth.verifyClassPassword(cls, "SALAH-1234"))
+            assertFalse("Empty password must fail for $cls", com.example.domain.auth.ClassTeacherAuth.verifyClassPassword(cls, ""))
         }
 
-        // Normalization & deterministic SHA-256 hashing
-        val normalized = com.example.domain.auth.ActivationCodeGenerator.normalizeCode(" guru 8k2p 9m4x ")
-        assertEquals("GURU-8K2P-9M4X", normalized)
-        assertTrue(com.example.domain.auth.ActivationCodeGenerator.isValidFormat(normalized))
-        assertEquals(
-            com.example.domain.auth.ActivationCodeGenerator.sha256Hex("GURU-8K2P-9M4X"),
-            com.example.domain.auth.ActivationCodeGenerator.sha256Hex("guru-8k2p-9m4x")
-        )
-        assertFalse(com.example.domain.auth.ActivationCodeGenerator.isValidFormat("INVALID-123"))
-
-        // 7-day expiry check
-        val nowMs = 1_700_000_000_000L
-        val expMs = com.example.domain.auth.ActivationCodeGenerator.computeExpiryMillis(nowMs)
-        assertEquals(7L * 24L * 60L * 60L * 1000L, expMs - nowMs)
+        // Cross-class isolation: password for X TP 1 must NOT unlock X TP 2
+        assertFalse(com.example.domain.auth.ClassTeacherAuth.verifyClassPassword("X TP 2", "MLAB-XTP1-4829"))
+        assertFalse(com.example.domain.auth.ClassTeacherAuth.verifyClassPassword("X TP 1", "MLAB-XTP2-7394"))
+        assertFalse(com.example.domain.auth.ClassTeacherAuth.verifyClassPassword("Kelas Tidak Ada", "MLAB-XTP1-4829"))
     }
 }
 
